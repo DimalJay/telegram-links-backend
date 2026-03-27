@@ -29,6 +29,15 @@ All endpoints are JSON.
 
 Base URL (dev): `http://localhost:3000`
 
+### CORS
+
+For browser-based frontends, all API routes:
+
+- include `Access-Control-Allow-*` headers
+- support `OPTIONS` (preflight) requests
+
+Configure allowed origin via `CORS_ORIGIN` (defaults to `*`).
+
 ### Data Model
 
 Stored item shape:
@@ -42,19 +51,27 @@ Stored item shape:
 	"isAdultOnly": true,
 	"type": "group | channel",
 	"link": "string",
-	"country": "string",
 	"createdAt": "ISO-8601 timestamp"
 }
 ```
 
 ### GET /api/groups
 
-Returns all saved Telegram groups (newest first).
+Returns saved Telegram groups (newest first).
+
+Query params:
+
+- `page` (optional) — page number (default: `1`)
+- `limit` (optional) — items per page (default: `20`, max: `100`)
 
 Response `200`:
 
 ```json
 {
+	"page": 1,
+	"limit": 20,
+	"total": 123,
+	"totalPages": 7,
 	"items": [
 		{
 			"id": "...",
@@ -64,7 +81,6 @@ Response `200`:
 			"isAdultOnly": false,
 			"type": "group",
 			"link": "https://t.me/...",
-			"country": "...",
 			"createdAt": "2026-03-27T00:00:00.000Z"
 		}
 	]
@@ -75,70 +91,123 @@ Example:
 
 ```bash
 curl http://localhost:3000/api/groups
+curl "http://localhost:3000/api/groups?page=2&limit=50"
 ```
 
 ### GET /api/channels
 
-Returns all saved Telegram channels (newest first).
+Returns saved Telegram channels (newest first).
+
+Query params:
+
+- `page` (optional) — page number (default: `1`)
+- `limit` (optional) — items per page (default: `20`, max: `100`)
 
 Response `200`:
 
 ```json
-{ "items": [/* TelegramLink (type=channel) */] }
+{
+	"page": 1,
+	"limit": 20,
+	"total": 123,
+	"totalPages": 7,
+	"items": [/* TelegramLink (type=channel) */]
+}
 ```
 
 Example:
 
 ```bash
 curl http://localhost:3000/api/channels
+curl "http://localhost:3000/api/channels?page=1&limit=10"
 ```
 
 ### GET /api/trending/groups
 
-Returns “trending” groups (currently implemented as the 10 newest groups).
+Returns “trending” groups (currently implemented as all groups, newest first).
+
+Query params:
+
+- `filter` (optional) — `trending`, `latest`, or `hot` (default: `trending`)
+- `page` (optional) — page number (default: `1`)
+- `limit` (optional) — items per page (default: `20`, max: `100`)
+
+Note: until the trending algorithm is defined, `trending`, `latest`, and `hot` all return newest-first.
 
 Response `200`:
 
 ```json
-{ "items": [/* up to 10 TelegramLink (type=group) */] }
+{
+	"page": 1,
+	"limit": 20,
+	"total": 123,
+	"totalPages": 7,
+	"items": [/* TelegramLink (type=group) */]
+}
 ```
 
 Example:
 
 ```bash
 curl http://localhost:3000/api/trending/groups
+curl "http://localhost:3000/api/trending/groups?page=2&limit=50"
+curl "http://localhost:3000/api/trending/groups?filter=hot"
 ```
 
 ### GET /api/trending/channels
 
-Returns “trending” channels (currently implemented as the 10 newest channels).
+Returns “trending” channels (currently implemented as all channels, newest first).
+
+Query params:
+
+- `filter` (optional) — `trending`, `latest`, or `hot` (default: `trending`)
+- `page` (optional) — page number (default: `1`)
+- `limit` (optional) — items per page (default: `20`, max: `100`)
+
+Note: until the trending algorithm is defined, `trending`, `latest`, and `hot` all return newest-first.
 
 Response `200`:
 
 ```json
-{ "items": [/* up to 10 TelegramLink (type=channel) */] }
+{
+	"page": 1,
+	"limit": 20,
+	"total": 123,
+	"totalPages": 7,
+	"items": [/* TelegramLink (type=channel) */]
+}
 ```
 
 Example:
 
 ```bash
 curl http://localhost:3000/api/trending/channels
+curl "http://localhost:3000/api/trending/channels?page=1&limit=10"
+curl "http://localhost:3000/api/trending/channels?filter=latest"
 ```
 
 ### GET /api/search
 
-Searches saved items by substring match over `name`, `description`, `category`, `link`, and `country`.
+Searches saved items by substring match over `name`, `description`, `category`, and `link`.
 
 Query params:
 
 - `query` (required) — search text
 - `q` (optional) — alias for `query`
 - `type` (optional) — `group` or `channel`
+- `page` (optional) — page number (default: `1`)
+- `limit` (optional) — items per page (default: `20`, max: `100`)
 
 Response `200`:
 
 ```json
-{ "items": [/* TelegramLink[] */] }
+{
+	"page": 1,
+	"limit": 20,
+	"total": 123,
+	"totalPages": 7,
+	"items": [/* TelegramLink[] */]
+}
 ```
 
 Errors:
@@ -150,6 +219,7 @@ Examples:
 ```bash
 curl "http://localhost:3000/api/search?query=crypto"
 curl "http://localhost:3000/api/search?q=news&type=channel"
+curl "http://localhost:3000/api/search?query=crypto&page=3&limit=25"
 ```
 
 ### POST /api/links
@@ -165,8 +235,7 @@ Request body (JSON):
 	"category": "News",
 	"isAdultOnly": false,
 	"type": "channel",
-	"link": "https://t.me/example",
-	"country": "US"
+	"link": "https://t.me/example"
 }
 ```
 
@@ -178,7 +247,6 @@ Validation rules:
 - `isAdultOnly`: required boolean
 - `type`: required, must be `group` or `channel`
 - `link`: required, non-empty string, max 2048 chars, must be unique
-- `country`: required, non-empty string, max 100 chars
 
 Response `201`:
 
@@ -192,7 +260,6 @@ Response `201`:
 		"isAdultOnly": false,
 		"type": "channel",
 		"link": "https://t.me/example",
-		"country": "...",
 		"createdAt": "2026-03-27T00:00:00.000Z"
 	}
 }
@@ -209,7 +276,7 @@ Examples:
 ```bash
 curl -X POST http://localhost:3000/api/links \
 	-H "Content-Type: application/json" \
-	-d "{\"name\":\"My Group\",\"description\":\"Desc\",\"category\":\"Chat\",\"isAdultOnly\":false,\"type\":\"group\",\"link\":\"https://t.me/mygroup\",\"country\":\"US\"}"
+	-d "{\"name\":\"My Group\",\"description\":\"Desc\",\"category\":\"Chat\",\"isAdultOnly\":false,\"type\":\"group\",\"link\":\"https://t.me/mygroup\"}"
 ```
 
 ## Storage

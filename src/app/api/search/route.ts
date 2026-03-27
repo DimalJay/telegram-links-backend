@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { corsOptionsResponse, getCorsHeaders } from "@/lib/cors";
-import { searchLinks } from "@/lib/telegramLinks";
+import { parsePagination } from "@/lib/pagination";
+import { searchLinksPaginated } from "@/lib/telegramLinks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
   const typeParam = url.searchParams.get("type");
   const type = typeParam === "group" || typeParam === "channel" ? typeParam : null;
 
-  const items = await searchLinks({ query, type: type ?? undefined });
-  return NextResponse.json({ items }, { headers: getCorsHeaders() });
+  const { page, limit } = parsePagination(url.searchParams);
+  const result = await searchLinksPaginated({ query, type: type ?? undefined, page, limit });
+  return NextResponse.json(result, { headers: getCorsHeaders() });
 }

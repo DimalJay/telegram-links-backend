@@ -12,9 +12,10 @@ export type TelegramLink = {
   isAdultOnly: boolean;
   type: TelegramLinkType;
   link: string;
-  country: string;
   createdAt: string;
 };
+
+export type CreateTelegramLinkData = Omit<TelegramLink, "id" | "createdAt">;
 
 export type CreateTelegramLinkInput = {
   name?: unknown;
@@ -24,7 +25,6 @@ export type CreateTelegramLinkInput = {
   isAdultOnly: unknown;
   link: unknown;
   type: unknown;
-  country: unknown;
 };
 
 type TelegramLinkDoc = {
@@ -35,7 +35,6 @@ type TelegramLinkDoc = {
   isAdultOnly: boolean;
   type: TelegramLinkType;
   link: string;
-  country: string;
   createdAt: Date;
 };
 
@@ -67,14 +66,13 @@ function toApiModel(doc: TelegramLinkDoc): TelegramLink {
     isAdultOnly: doc.isAdultOnly,
     type: doc.type,
     link: doc.link,
-    country: doc.country,
     createdAt: doc.createdAt.toISOString(),
   };
 }
 
 export function validateCreateInput(input: CreateTelegramLinkInput): {
   ok: true;
-  value: Omit<TelegramLink, "id" | "createdAt">;
+  value: CreateTelegramLinkData;
 } | {
   ok: false;
   error: string;
@@ -118,10 +116,13 @@ export function validateCreateInput(input: CreateTelegramLinkInput): {
   if (!link) return { ok: false, error: "link is required" };
   if (link.length > 2048) return { ok: false, error: "link is too long" };
 
-  const countryRaw = typeof input.country === "string" ? input.country : "";
-  const country = countryRaw.trim();
-  if (!country) return { ok: false, error: "country is required" };
-  if (country.length > 100) return { ok: false, error: "country is too long" };
+  const normalizedLink = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+  try {
+    // Ensures it's a valid URL (also helps logo fetching)
+    new URL(normalizedLink);
+  } catch {
+    return { ok: false, error: "link must be a valid URL" };
+  }
 
   return {
     ok: true,
@@ -131,17 +132,17 @@ export function validateCreateInput(input: CreateTelegramLinkInput): {
       category,
       isAdultOnly,
       type,
-      link,
-      country,
+      link: normalizedLink,
     },
   };
 }
 
-export async function addLink(input: Omit<TelegramLink, "id" | "createdAt">) {
+export async function addLink(input: CreateTelegramLinkData) {
   const collection = await getCollection();
 
   try {
     const createdAt = new Date();
+
     const doc = {
       name: input.name,
       description: input.description,
@@ -149,13 +150,13 @@ export async function addLink(input: Omit<TelegramLink, "id" | "createdAt">) {
       isAdultOnly: input.isAdultOnly,
       type: input.type,
       link: input.link,
-      country: input.country,
       createdAt,
     };
 
     const result = await collection.insertOne(doc as any);
+    const id = result.insertedId.toHexString();
     const created: TelegramLink = {
-      id: result.insertedId.toHexString(),
+      id,
       ...input,
       createdAt: createdAt.toISOString(),
     };
@@ -192,6 +193,44 @@ export async function listLinks(options?: {
   return docs.map(toApiModel);
 }
 
+export type PaginatedResult<T> = {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export async function listLinksPaginated(options: {
+  type?: TelegramLinkType;
+  page: number;
+  limit: number;
+}): Promise<PaginatedResult<TelegramLink>> {
+  const collection = await getCollection();
+  const filter: any = {};
+  if (options.type) filter.type = options.type;
+
+  const total = await collection.countDocuments(filter);
+  const totalPages = Math.max(1, Math.ceil(total / options.limit));
+  const page = Math.min(Math.max(1, options.page), totalPages);
+  const skip = (page - 1) * options.limit;
+
+  const docs = await collection
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(options.limit)
+    .toArray();
+
+  return {
+    items: docs.map(toApiModel),
+    page,
+    limit: options.limit,
+    total,
+    totalPages,
+  };
+}
+
 export async function searchLinks(options: {
   query: string;
   type?: TelegramLinkType;
@@ -205,11 +244,50 @@ export async function searchLinks(options: {
       { description: { $regex: q, $options: "i" } },
       { category: { $regex: q, $options: "i" } },
       { link: { $regex: q, $options: "i" } },
-      { country: { $regex: q, $options: "i" } },
     ],
   };
   if (options.type) filter.type = options.type;
 
   const docs = await collection.find(filter).sort({ createdAt: -1 }).toArray();
   return docs.map(toApiModel);
+}
+
+export async function searchLinksPaginated(options: {
+  query: string;
+  type?: TelegramLinkType;
+  page: number;
+  limit: number;
+}): Promise<PaginatedResult<TelegramLink>> {
+  const collection = await getCollection();
+  const q = options.query.trim();
+
+  const filter: any = {
+    $or: [
+      { name: { $regex: q, $options: "i" } },
+      { description: { $regex: q, $options: "i" } },
+      { category: { $regex: q, $options: "i" } },
+      { link: { $regex: q, $options: "i" } },
+    ],
+  };
+  if (options.type) filter.type = options.type;
+
+  const total = await collection.countDocuments(filter);
+  const totalPages = Math.max(1, Math.ceil(total / options.limit));
+  const page = Math.min(Math.max(1, options.page), totalPages);
+  const skip = (page - 1) * options.limit;
+
+  const docs = await collection
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(options.limit)
+    .toArray();
+
+  return {
+    items: docs.map(toApiModel),
+    page,
+    limit: options.limit,
+    total,
+    totalPages,
+  };
 }
