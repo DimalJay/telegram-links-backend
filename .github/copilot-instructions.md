@@ -1,0 +1,9 @@
+- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+- [x] Clarify Project Requirements (Next.js backend, API-only routes).
+- [x] Scaffold the Project (create-next-app).
+- [x] Customize the Project (Telegram links API routes + storage).
+- [ ] Install Required Extensions (none required).
+- [x] Compile the Project (`npm ci`, `npm run build`).
+- [ ] Create and Run Task (not required for this repo).
+- [ ] Launch the Project (run `npm run dev`).
+- [x] Ensure Documentation is Complete (README updated).
